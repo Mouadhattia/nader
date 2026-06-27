@@ -89,6 +89,12 @@ npm run deploy:build
 npm start
 ```
 
+To run with `backend/.env.production` locally:
+
+```bash
+npm run start:prod
+```
+
 Production URLs:
 
 ```text
@@ -112,7 +118,21 @@ Environment variables:
 ```env
 NODE_ENV=production
 MONGO_URI=mongodb+srv://<user>:<password>@<cluster>.mongodb.net/audio-guest-book
-PORT=5000
+PORT=6321
+FRONTEND_URL=https://mouadhattia.xyz
+```
+
+If the frontend and backend are deployed on separate domains, set the frontend production API URL:
+
+```env
+VITE_API_URL=https://api.mouadhattia.xyz
+```
+
+Production env templates are included:
+
+```text
+.env.production.example
+backend/.env.production.example
 ```
 
 For phone microphone access, deploy over HTTPS. Mobile browsers often block microphone access on LAN HTTP.
