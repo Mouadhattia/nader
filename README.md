@@ -82,35 +82,45 @@ http://localhost:3000/guest
 
 ## Production Build
 
-This repo is deployable as one Node service. The Express backend serves the built Vite frontend from `dist`.
+The recommended VPS setup runs the frontend and backend as two processes:
+
+- Frontend: `3331`
+- Backend API: `6321`
 
 ```bash
 npm run deploy:build
-npm start
 ```
 
-To run with `backend/.env.production` locally:
+Start frontend:
 
 ```bash
-npm run start:prod
+npm run start:frontend
+```
+
+Start backend:
+
+```bash
+npm run start:backend
 ```
 
 Production URLs:
 
 ```text
-http://localhost:5000/admin
-http://localhost:5000/guest
+http://localhost:3331/admin
+http://localhost:3331/guest
+http://localhost:6321/health
 ```
 
 ## Deployment
 
-Use one web service on Render, Railway, Fly.io, a VPS, or another Node host.
+Use a VPS or another Node host.
 
 Recommended settings:
 
 ```text
 Build command: npm run deploy:build
-Start command: npm start
+Frontend start command: npm run start:frontend
+Backend start command: npm run start:backend
 ```
 
 Environment variables:
@@ -126,6 +136,21 @@ If the frontend and backend are deployed on separate domains, set the frontend p
 
 ```env
 VITE_API_URL=https://api.mouadhattia.xyz
+```
+
+For PM2:
+
+```bash
+pm2 start npm --name audio-guest-book-frontend -- run start:frontend
+pm2 start npm --name audio-guest-book-backend -- run start:backend
+pm2 save
+```
+
+Nginx should proxy:
+
+```text
+mouadhattia.xyz -> http://127.0.0.1:3331
+api.mouadhattia.xyz -> http://127.0.0.1:6321
 ```
 
 Production env templates are included:
@@ -169,7 +194,9 @@ Never commit `.env` files or real MongoDB credentials.
 ```bash
 npm run dev          # Frontend dev server on port 3000
 npm run build        # Build frontend
-npm run start        # Start backend and serve built frontend
+npm run start        # Start backend and serve built frontend from one process
+npm run start:frontend # Serve built frontend on port 3331
+npm run start:backend  # Start production backend on port from backend/.env.production
 npm run install:all  # Install root and backend dependencies
 npm run deploy:build # Install all dependencies and build frontend
 ```

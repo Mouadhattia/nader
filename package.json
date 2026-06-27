@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "start": "node backend/server.js",
     "start:prod": "node -e \"process.env.NODE_ENV='production'; require('./backend/server.js')\"",
+    "start:frontend": "vite preview --host 0.0.0.0 --port 3331",
+    "start:backend": "node -e \"process.env.NODE_ENV='production'; require('./backend/server.js')\"",
     "install:all": "npm install && npm --prefix backend install",
     "deploy:build": "npm install && npm --prefix backend install && npm run build"
   },
