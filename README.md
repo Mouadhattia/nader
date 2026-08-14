@@ -138,20 +138,41 @@ If the frontend and backend are deployed on separate domains, set the frontend p
 VITE_API_URL=https://api.mouadhattia.xyz
 ```
 
-For PM2:
+For PM2, use the checked-in process file (`APP_DIR` inside it is set to
+`/var/www/html/nader`):
 
 ```bash
-pm2 start npm --name audio-guest-book-frontend -- run start:frontend
-pm2 start npm --name audio-guest-book-backend -- run start:backend
+pm2 start ecosystem.config.cjs
 pm2 save
+```
+
+To redeploy after a code change:
+
+```bash
+./deploy/deploy.sh
+```
+
+Then smoke-test the live site from anywhere:
+
+```bash
+./deploy/verify.sh
 ```
 
 Nginx should proxy:
 
 ```text
-mouadhattia.xyz -> http://127.0.0.1:3331
+mouadhattia.xyz     -> http://127.0.0.1:3331
 api.mouadhattia.xyz -> http://127.0.0.1:6321
 ```
+
+Reference vhosts are in `deploy/nginx/`. The API vhost **must** include the
+`location /socket.io/` block with the `Upgrade`/`Connection` headers, plus the
+`map $http_upgrade $connection_upgrade` from
+`deploy/nginx/websocket-upgrade.conf` in `/etc/nginx/conf.d/`. Without them the
+Raspberry Pi phone button cannot hold a WebSocket to the backend.
+
+Building requires Node 20.19+ or 22.12+ on the server (Vite 7). Check with
+`node -v` before running `deploy.sh`.
 
 Production env templates are included:
 

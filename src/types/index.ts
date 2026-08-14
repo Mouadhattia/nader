@@ -44,5 +44,4 @@ export type RecordingStep =
   | 'eventSelect'
   | 'welcome'
   | 'recording'
-  | 'preview'
-  | 'success';
+  | 'saving';

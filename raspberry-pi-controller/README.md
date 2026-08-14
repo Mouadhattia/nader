@@ -18,10 +18,10 @@ connect two wires together when pressed and disconnect them when released.
 
 Connect the button's two legs across:
 
-| Signal        | Physical pin | Notes                          |
-|---------------|:------------:|---------------------------------|
-| GPIO17 (BCM)  | Pin 11       | Set by `BUTTON_GPIO_PIN` in `.env` |
-| GND           | Pin 9        | Any GND pin on the header works |
+| Signal       | Physical pin | Notes                              |
+| ------------ | :----------: | ---------------------------------- |
+| GPIO17 (BCM) |    Pin 11    | Set by `BUTTON_GPIO_PIN` in `.env` |
+| GND          |    Pin 9     | Any GND pin on the header works    |
 
 Physical pin numbering counts the 40-pin header with pin 1 at the corner
 closest to the SD card slot. For reference, the top-left corner of the
@@ -114,6 +114,26 @@ cp .env.example .env
 
 ### 5. Configure `.env`
 
+For the deployed server (Pi on 5G, anywhere in the world) just copy the
+production template — it already points at the public API:
+
+```bash
+cp .env.production.example .env
+```
+
+```env
+SERVER_URL=https://api.mouadhattia.xyz
+PI_SHARED_TOKEN=<same value as backend/.env.production PI_SHARED_TOKEN>
+BUTTON_GPIO_PIN=17
+SIMULATE=false
+```
+
+The Pi dials **out** to the server, so its 5G IP address never has to be known,
+fixed, or allowlisted, and no port forwarding is needed on the 5G connection.
+`PI_SHARED_TOKEN` is what identifies it instead of an IP.
+
+For a purely local setup instead:
+
 ```env
 SERVER_URL=http://<backend-host-lan-ip>:5000
 PI_SHARED_TOKEN=<same value as backend/.env PI_SHARED_TOKEN>
@@ -162,3 +182,6 @@ journalctl -u audio-guest-book-button.service -f
 
 Adjust `User`, `WorkingDirectory`, and `ExecStart` in the service file if
 you didn't clone this into `/home/pi/raspberry-pi-controller`.
+
+sudo systemctl restart audio-guest-book-button.service
+journalctl -u audio-guest-book-button.service -f -o cat

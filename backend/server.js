@@ -21,13 +21,21 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/audio-guest-book';
 const PI_SHARED_TOKEN = process.env.PI_SHARED_TOKEN || '';
 
+// FRONTEND_URL accepts a comma-separated list so apex and www (or a staging
+// domain) can be allowed at once, e.g.
+// FRONTEND_URL=https://mouadhattia.xyz,https://www.mouadhattia.xyz
+const frontendOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => origin.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
 const allowedOrigins = new Set([
-  process.env.FRONTEND_URL,
+  ...frontendOrigins,
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
-].filter(Boolean));
+]);
 
 function isPrivateNetworkOrigin(origin) {
   try {

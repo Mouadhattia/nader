@@ -1,9 +1,8 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { EventSelectStep } from '../components/guest/EventSelectStep';
 import { WelcomeStep } from '../components/guest/WelcomeStep';
 import { RecordingStep } from '../components/guest/RecordingStep';
-import { PreviewStep } from '../components/guest/PreviewStep';
-import { SuccessStep } from '../components/guest/SuccessStep';
+import { SavingStep } from '../components/guest/SavingStep';
 import { uploadRecording } from '../api/recordings';
 import { fetchActiveEvents, getEventAudioUrl } from '../api/events';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
@@ -24,7 +23,13 @@ export const GuestPage: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<GuestBookEvent | null>(null);
   const guestName = '';
   const [recordingData, setRecordingData] = useState<RecordingData | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [justSaved, setJustSaved] = useState(false);
   const recorder = useAudioRecorder();
+
+  // Guards against the auto-save firing twice for one recording (the effect in
+  // RecordingStep can re-run before the step change unmounts it).
+  const savingRef = useRef(false);
 
   const loadEvents = useCallback(async () => {
     setEventsLoading(true);
@@ -78,6 +83,8 @@ export const GuestPage: React.FC = () => {
   const handleSelectEvent = useCallback((event: GuestBookEvent) => {
     setSelectedEvent(event);
     setRecordingData(null);
+    setSaveError(null);
+    savingRef.current = false;
     recorder.resetRecording();
     setStep('welcome');
   }, [recorder]);
@@ -85,11 +92,33 @@ export const GuestPage: React.FC = () => {
   const startRecordingFor = useCallback(async (event: GuestBookEvent) => {
     recorder.resetRecording();
     setRecordingData(null);
+    setSaveError(null);
+    setJustSaved(false);
+    savingRef.current = false;
     setStep('recording');
     await recorder.startRecording({
       beforeStart: () => playEventWelcome(event),
     });
   }, [playEventWelcome, recorder]);
+
+  /**
+   * Back to the start-recording screen for the same event, ready for the next
+   * guest. Only falls back to the event list if no event is selected.
+   */
+  const returnToStart = useCallback(() => {
+    recorder.resetRecording();
+    setRecordingData(null);
+    setSaveError(null);
+    savingRef.current = false;
+
+    if (selectedEvent) {
+      setStep('welcome');
+      return;
+    }
+
+    setStep('eventSelect');
+    loadEvents();
+  }, [recorder, selectedEvent, loadEvents]);
 
   const handleStart = useCallback(async () => {
     if (!selectedEvent) {
@@ -100,14 +129,21 @@ export const GuestPage: React.FC = () => {
   }, [selectedEvent, startRecordingFor]);
 
   const handleRemoteStart = useCallback(() => {
-    if (step === 'welcome' && selectedEvent) {
+    // Already busy — ignore the press instead of clobbering a live recording
+    // or an in-flight upload.
+    if (step === 'recording' || step === 'saving') return;
+
+    // The event stays selected between guests, so a press starts a fresh
+    // recording from the welcome screen *or* from the thank-you screen if the
+    // next guest picks up the phone before it auto-resets.
+    if (selectedEvent) {
       void startRecordingFor(selectedEvent);
       return;
     }
 
-    // Guest hasn't tapped an event on screen yet. If there's exactly one
-    // active event, the phone button alone is enough to start.
-    if (step === 'eventSelect' && events.length === 1) {
+    // Nobody has picked an event yet. If there's exactly one active event,
+    // the phone button alone is enough to start.
+    if (events.length === 1) {
       const event = events[0];
       setSelectedEvent(event);
       void startRecordingFor(event);
@@ -125,47 +161,77 @@ export const GuestPage: React.FC = () => {
     onRemoteStop: handleRemoteStop,
   });
 
-  const handleRecordingFinished = useCallback(
-    (blob: Blob, url: string, duration: number) => {
-      setRecordingData({ blob, url, duration });
-      setStep('preview');
+  const saveRecording = useCallback(
+    async (data: RecordingData, event: GuestBookEvent) => {
+      setSaveError(null);
+      try {
+        await uploadRecording({
+          audio: data.blob,
+          guestName: guestName || 'Anonymous Guest',
+          eventName: event.name,
+          eventId: event._id,
+          duration: data.duration,
+        });
+        // Straight back to the start screen — no confirmation page, no taps.
+        setJustSaved(true);
+        returnToStart();
+      } catch (err) {
+        setSaveError(
+          err instanceof Error ? err.message : 'Failed to save your message.'
+        );
+      }
     },
-    []
+    [guestName, returnToStart]
   );
 
-  const handleSave = useCallback(async () => {
-    if (!recordingData) throw new Error('No recording data');
-    if (!selectedEvent) throw new Error('No event selected');
+  // Stopping the recording saves it immediately — the guest never confirms.
+  const handleRecordingFinished = useCallback(
+    (blob: Blob, url: string, duration: number) => {
+      if (savingRef.current) return;
+      savingRef.current = true;
 
-    await uploadRecording({
-      audio: recordingData.blob,
-      guestName: guestName || 'Anonymous Guest',
-      eventName: selectedEvent.name,
-      eventId: selectedEvent._id,
-      duration: recordingData.duration,
-    });
+      const data = { blob, url, duration };
+      setRecordingData(data);
+      setStep('saving');
 
-    setStep('success');
-  }, [recordingData, guestName, selectedEvent]);
+      if (!selectedEvent) {
+        setSaveError('No event selected.');
+        return;
+      }
+      if (blob.size === 0) {
+        setSaveError('Nothing was recorded. Please try again.');
+        return;
+      }
 
-  const handleRecordAgain = useCallback(async () => {
+      void saveRecording(data, selectedEvent);
+    },
+    [selectedEvent, saveRecording]
+  );
+
+  const handleRetrySave = useCallback(() => {
     if (!selectedEvent) {
       setStep('eventSelect');
       return;
     }
-    await startRecordingFor(selectedEvent);
-  }, [selectedEvent, startRecordingFor]);
+    // Nothing usable to upload — start a fresh recording instead.
+    if (!recordingData || recordingData.blob.size === 0) {
+      void startRecordingFor(selectedEvent);
+      return;
+    }
+    setSaveError(null);
+    void saveRecording(recordingData, selectedEvent);
+  }, [recordingData, selectedEvent, saveRecording, startRecordingFor]);
 
-  const handleNextGuest = useCallback(() => {
-    recorder.resetRecording();
-    setSelectedEvent(null);
-    setRecordingData(null);
-    setStep('eventSelect');
-    loadEvents();
-  }, [loadEvents, recorder]);
+  // Clear the "saved" confirmation chip on the start screen after a moment.
+  useEffect(() => {
+    if (!justSaved) return;
+    const timer = window.setTimeout(() => setJustSaved(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [justSaved]);
 
   const handleCancelRecording = useCallback(() => {
     recorder.resetRecording();
+    savingRef.current = false;
     setStep('welcome');
   }, [recorder]);
 
@@ -173,6 +239,8 @@ export const GuestPage: React.FC = () => {
     recorder.resetRecording();
     setSelectedEvent(null);
     setRecordingData(null);
+    setSaveError(null);
+    savingRef.current = false;
     setStep('eventSelect');
     loadEvents();
   }, [loadEvents, recorder]);
@@ -211,6 +279,7 @@ export const GuestPage: React.FC = () => {
             welcomeAudioUrl={getEventAudioUrl(selectedEvent?.welcomeAudioUrl)}
             onStart={handleStart}
             onBack={handleChangeEvent}
+            savedNotice={justSaved}
           />
         )}
 
@@ -230,22 +299,11 @@ export const GuestPage: React.FC = () => {
           />
         )}
 
-        {step === 'preview' && recordingData && (
-          <PreviewStep
-            audioUrl={recordingData.url}
-            audioBlob={recordingData.blob}
-            guestName={guestName}
-            eventName={selectedEvent?.name || ''}
-            duration={recordingData.duration}
-            onSave={handleSave}
-            onRecordAgain={handleRecordAgain}
-          />
-        )}
-
-        {step === 'success' && (
-          <SuccessStep
-            guestName={guestName}
-            onNextGuest={handleNextGuest}
+        {step === 'saving' && (
+          <SavingStep
+            errorMessage={saveError}
+            onRetry={handleRetrySave}
+            onStartOver={returnToStart}
           />
         )}
       </div>

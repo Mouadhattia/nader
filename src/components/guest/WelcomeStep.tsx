@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Mic, Music } from 'lucide-react';
+import { ArrowLeft, Check, Mic, Music } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { AudioPlayer } from '../ui/AudioPlayer';
 
@@ -9,6 +9,8 @@ interface WelcomeStepProps {
   welcomeAudioUrl?: string;
   onStart: () => void | Promise<void>;
   onBack?: () => void;
+  /** Briefly confirms the previous guest's message was saved. */
+  savedNotice?: boolean;
 }
 
 export const WelcomeStep: React.FC<WelcomeStepProps> = ({
@@ -17,9 +19,18 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({
   welcomeAudioUrl,
   onStart,
   onBack,
+  savedNotice = false,
 }) => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-8 py-12 text-center">
+      {savedNotice && (
+        <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-green-400/15 border border-green-300/30">
+          <Check size={16} className="text-green-300" />
+          <span className="text-green-200 text-sm font-semibold">
+            Message saved — thank you!
+          </span>
+        </div>
+      )}
       {/* Icon */}
       <div className="relative mb-8">
         <div className="w-28 h-28 rounded-full bg-yellow-400/15 border border-yellow-300/30 flex items-center justify-center backdrop-blur-sm">
