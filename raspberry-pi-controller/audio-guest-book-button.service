@@ -1,0 +1,16 @@
+[Unit]
+Description=Audio Guest Book phone button controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/raspberry-pi-controller
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/raspberry-pi-controller/venv/bin/python phone_button.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -10,13 +10,16 @@ require('dotenv').config({
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
+const http = require('http');
 const mongoose = require('mongoose');
+const { Server } = require('socket.io');
 const recordingsRouter = require('./routes/recordings');
 const eventsRouter = require('./routes/events');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/audio-guest-book';
+const PI_SHARED_TOKEN = process.env.PI_SHARED_TOKEN || '';
 
 const allowedOrigins = new Set([
   process.env.FRONTEND_URL,
@@ -59,6 +62,57 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// ─── Socket.IO (phone button <-> guest kiosk bridge) ──────────────────────────
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.has(origin) || isPrivateNetworkOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked origin: ${origin}`));
+    },
+    credentials: true,
+  },
+});
+
+function isAuthorizedButtonClient(socket) {
+  if (!PI_SHARED_TOKEN) return true;
+  return socket.handshake.auth?.token === PI_SHARED_TOKEN;
+}
+
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
+
+  // Raspberry Pi phone button -> relay to guest kiosk browser(s).
+  // Anyone may connect and listen (the kiosk browser needs no secret);
+  // only a client presenting PI_SHARED_TOKEN may trigger start/stop.
+  socket.on('start_recording', () => {
+    if (!isAuthorizedButtonClient(socket)) {
+      console.warn('⚠️  Rejected start_recording from unauthorized socket', socket.id);
+      return;
+    }
+    console.log('▶️  Remote start_recording received from', socket.id);
+    socket.broadcast.emit('remote:start_recording');
+  });
+
+  socket.on('stop_recording', () => {
+    if (!isAuthorizedButtonClient(socket)) {
+      console.warn('⚠️  Rejected stop_recording from unauthorized socket', socket.id);
+      return;
+    }
+    console.log('⏹️  Remote stop_recording received from', socket.id);
+    socket.broadcast.emit('remote:stop_recording');
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`🔌 Socket disconnected: ${socket.id} (${reason})`);
+  });
+});
 
 // Serve uploaded audio files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -117,9 +171,10 @@ async function start() {
     await mongoose.connect(MONGO_URI);
     console.log('✅ MongoDB connected:', MONGO_URI);
 
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🎙️  Audio Guest Book API running on http://localhost:${PORT}`);
       console.log(`📁  Uploads served at http://localhost:${PORT}/uploads`);
+      console.log(`🔌  Socket.IO ready for phone button events`);
     });
   } catch (err) {
     console.error('❌ Failed to connect to MongoDB:', err.message);

@@ -7,6 +7,7 @@ import { SuccessStep } from '../components/guest/SuccessStep';
 import { uploadRecording } from '../api/recordings';
 import { fetchActiveEvents, getEventAudioUrl } from '../api/events';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
+import { useRemoteRecordingTrigger } from '../hooks/useRemoteRecordingTrigger';
 import { GuestBookEvent, RecordingStep as Step } from '../types';
 
 interface RecordingData {
@@ -21,7 +22,7 @@ export const GuestPage: React.FC = () => {
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<GuestBookEvent | null>(null);
-  const [guestName, setGuestName] = useState('');
+  const guestName = '';
   const [recordingData, setRecordingData] = useState<RecordingData | null>(null);
   const recorder = useAudioRecorder();
 
@@ -76,26 +77,53 @@ export const GuestPage: React.FC = () => {
 
   const handleSelectEvent = useCallback((event: GuestBookEvent) => {
     setSelectedEvent(event);
-    setGuestName('');
     setRecordingData(null);
     recorder.resetRecording();
     setStep('welcome');
   }, [recorder]);
 
-  const handleStart = useCallback(async (name: string) => {
+  const startRecordingFor = useCallback(async (event: GuestBookEvent) => {
+    recorder.resetRecording();
+    setRecordingData(null);
+    setStep('recording');
+    await recorder.startRecording({
+      beforeStart: () => playEventWelcome(event),
+    });
+  }, [playEventWelcome, recorder]);
+
+  const handleStart = useCallback(async () => {
     if (!selectedEvent) {
       setStep('eventSelect');
       return;
     }
+    await startRecordingFor(selectedEvent);
+  }, [selectedEvent, startRecordingFor]);
 
-    recorder.resetRecording();
-    setGuestName(name);
-    setRecordingData(null);
-    setStep('recording');
-    await recorder.startRecording({
-      beforeStart: () => playEventWelcome(selectedEvent),
-    });
-  }, [playEventWelcome, recorder, selectedEvent]);
+  const handleRemoteStart = useCallback(() => {
+    if (step === 'welcome' && selectedEvent) {
+      void startRecordingFor(selectedEvent);
+      return;
+    }
+
+    // Guest hasn't tapped an event on screen yet. If there's exactly one
+    // active event, the phone button alone is enough to start.
+    if (step === 'eventSelect' && events.length === 1) {
+      const event = events[0];
+      setSelectedEvent(event);
+      void startRecordingFor(event);
+    }
+  }, [step, selectedEvent, events, startRecordingFor]);
+
+  const handleRemoteStop = useCallback(() => {
+    if (step === 'recording') {
+      recorder.stopRecording();
+    }
+  }, [step, recorder]);
+
+  useRemoteRecordingTrigger({
+    onRemoteStart: handleRemoteStart,
+    onRemoteStop: handleRemoteStop,
+  });
 
   const handleRecordingFinished = useCallback(
     (blob: Blob, url: string, duration: number) => {
@@ -125,19 +153,12 @@ export const GuestPage: React.FC = () => {
       setStep('eventSelect');
       return;
     }
-
-    recorder.resetRecording();
-    setRecordingData(null);
-    setStep('recording');
-    await recorder.startRecording({
-      beforeStart: () => playEventWelcome(selectedEvent),
-    });
-  }, [playEventWelcome, recorder, selectedEvent]);
+    await startRecordingFor(selectedEvent);
+  }, [selectedEvent, startRecordingFor]);
 
   const handleNextGuest = useCallback(() => {
     recorder.resetRecording();
     setSelectedEvent(null);
-    setGuestName('');
     setRecordingData(null);
     setStep('eventSelect');
     loadEvents();

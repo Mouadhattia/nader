@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { ArrowLeft, Mic, Music } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { AudioPlayer } from '../ui/AudioPlayer';
@@ -7,7 +7,7 @@ interface WelcomeStepProps {
   eventName: string;
   welcomeMessage?: string;
   welcomeAudioUrl?: string;
-  onStart: (guestName: string) => void | Promise<void>;
+  onStart: () => void | Promise<void>;
   onBack?: () => void;
 }
 
@@ -18,8 +18,6 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({
   onStart,
   onBack,
 }) => {
-  const [name, setName] = useState('');
-
   return (
     <div className="flex flex-col items-center justify-center min-h-screen px-8 py-12 text-center">
       {/* Icon */}
@@ -61,31 +59,13 @@ export const WelcomeStep: React.FC<WelcomeStepProps> = ({
         </div>
       )}
 
-      {/* Name Input */}
-      <div className="w-full max-w-sm mb-8">
-        <label className="block text-white/70 text-sm font-medium mb-2 text-left">
-          Your name <span className="text-white/40">(optional)</span>
-        </label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void onStart(name.trim());
-          }}
-          placeholder="e.g. Sarah & John"
-          maxLength={60}
-          className="w-full px-5 py-4 rounded-2xl bg-black/35 border border-yellow-300/25 text-white placeholder-white/30 text-lg focus:outline-none focus:ring-2 focus:ring-yellow-300/50 focus:border-yellow-300/50 backdrop-blur-sm transition-all"
-        />
-      </div>
-
       {/* CTA */}
       <Button
         variant="primary"
         size="xl"
         icon={<Mic size={24} />}
         onClick={() => {
-          void onStart(name.trim());
+          void onStart();
         }}
         className="w-full max-w-sm text-2xl py-6 rounded-2xl"
       >
